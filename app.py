@@ -1,14 +1,23 @@
-# app.py - Main application entry point
+        # app.py - Main application entry point
 import asyncio
 import signal
 import sys
 import logging
+import os  # ADD THIS IMPORT
 from datetime import datetime
 
 from bot_manager import AutoResponderBot
 from config import Config
 
 # Configure logging
+logging.basicConfig(
+    level=getattr(logging, Config.LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('bot.log')
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Global bot instance
@@ -49,6 +58,21 @@ async def health_monitor(bot_instance):
         except Exception as e:
             logger.error(f"Health monitor error: {str(e)}")
 
+def handle_exception(loop, context):
+    """Handle uncaught exceptions"""
+    msg = context.get("exception", context["message"])
+    logger.error(f"Uncaught exception: {msg}")
+    
+    # Restart the bot
+    asyncio.create_task(restart_bot())
+
+async def restart_bot():
+    """Restart the bot"""
+    global bot
+    logger.info("Attempting to restart bot...")
+    await bot.safe_disconnect()
+    # Bot will auto-restart in main loop
+
 async def main():
     """Main application function"""
     global bot
@@ -63,6 +87,8 @@ async def main():
         
         # Setup signal handlers for graceful shutdown
         loop = asyncio.get_running_loop()
+        loop.set_exception_handler(handle_exception)
+        
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(
                 sig,
@@ -94,3 +120,4 @@ if __name__ == "__main__":
     
     # Run the application
     asyncio.run(main())
+    
