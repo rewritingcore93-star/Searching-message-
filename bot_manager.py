@@ -1,9 +1,10 @@
-# bot_manager.py
+# bot_manager.py - Updated with all required imports
 import asyncio
 import time
 import logging
 import signal
 import sys
+import os  # ADD THIS IMPORT
 from datetime import datetime
 from telethon import TelegramClient, events
 from telethon.errors import (
@@ -114,13 +115,30 @@ class AutoResponderBot:
                 await self.client.send_code_request(Config.PHONE_NUMBER)
                 
                 # Get code from environment or user input
-                code = input("Enter the code you received (or set CODE environment variable): ")
+                # On Railway, we need to use environment variable
+                code = os.getenv("TELEGRAM_CODE", "")
+                if not code:
+                    # In Railway, we can't use input(), so we'll log and exit
+                    logger.error("TELEGRAM_CODE environment variable not set!")
+                    logger.error("Please set TELEGRAM_CODE in Railway variables with the verification code.")
+                    logger.error("For first run, you need to:")
+                    logger.error("1. Check Railway logs for the code request")
+                    logger.error("2. Get the code from Telegram")
+                    logger.error("3. Set TELEGRAM_CODE in environment variables")
+                    logger.error("4. Redeploy the app")
+                    return False
                 
                 try:
                     await self.client.sign_in(Config.PHONE_NUMBER, code)
                 except SessionPasswordNeededError:
-                    password = input("Enter your 2FA password: ")
+                    password = os.getenv("TELEGRAM_PASSWORD", "")
+                    if not password:
+                        logger.error("TELEGRAM_PASSWORD environment variable not set for 2FA!")
+                        return False
                     await self.client.sign_in(password=password)
+                except Exception as e:
+                    logger.error(f"Failed to sign in with code: {str(e)}")
+                    return False
             else:
                 logger.info("Already authorized, logging in...")
             
@@ -297,5 +315,5 @@ class AutoResponderBot:
             "restart_count": self.restart_count,
             "messages_processed": self.messages_processed,
             "messages_responded": self.messages_responded,
-            "last_health_check": datetime.fromtimestamp(self.last_health_check).isoformat()
-          }
+            "last_health_check": datetime.fromtimestamp(self.last_health_check).isoformat() if self.last_health_check else None
+        }
